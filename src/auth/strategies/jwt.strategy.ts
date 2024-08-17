@@ -3,10 +3,14 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { supabaseClient } from 'src/supabase.client';
 import { PrismaService } from 'src/prisma.service';
+import { AuthService } from '../auth.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private prisma: PrismaService) {
+  constructor(
+    private prisma: PrismaService,
+    private readonly authService: AuthService,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -15,8 +19,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    console.log(payload);
-    
     let dbUser = await this.prisma.account.findUnique({
       where: {
         accountId: payload.sub,
@@ -30,10 +32,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User Not Exist');
     }
 
-    return {
+    const user = {
       sub: dbUser.accountId,
       username: dbUser.user.username,
       name: dbUser.user.name,
     };
+
+    const jwt = this.authService.refreshToken(user);
+
+    return { user, jwt };
   }
 }

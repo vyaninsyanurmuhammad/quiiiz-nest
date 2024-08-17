@@ -4,6 +4,8 @@ import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma.module';
+import { QuizModule } from './quiz/quiz.module';
+import { OpenaiModule } from './lib/openai/openai.module';
 
 @Module({
   imports: [
@@ -13,6 +15,8 @@ import { PrismaModule } from './prisma.module';
     }),
     AuthModule,
     PrismaModule,
+    QuizModule,
+    OpenaiModule,
   ],
   controllers: [AppController],
   providers: [AppService],

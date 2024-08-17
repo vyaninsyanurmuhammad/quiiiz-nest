@@ -64,20 +64,14 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('logout')
   async logout(@Res() res: Response) {
-    
     await this.authService.signOut();
 
-    return res.json({ message: "success sign out" });
+    return res.json({ message: 'success sign out' });
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('refresh-token')
-  async refreshToken(
-    @Req() req,
-    @Res() res: Response,
-  ) {
-    const jwt = this.authService.refreshToken(req.user);
-
-    return res.json({ ...jwt });
+  async refreshToken(@Req() req, @Res() res: Response) {
+    return res.json({ ...req.user.jwt });
   }
 }
