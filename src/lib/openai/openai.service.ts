@@ -1,5 +1,5 @@
 import { GenerativeModel, GoogleGenerativeAI } from '@google/generative-ai';
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { QuestionDto } from './dto/question.dto';
@@ -45,24 +45,23 @@ export class OpenaiService {
 
   async generateQuiz(createQuizDto: CreateQuizDto): Promise<QuestionDto[]> {
     const { topic, amount } = createQuizDto;
-    const system_prompt = `You are a helpful AI that is able to generate ${amount} mcq questions and answers, the length of each answer should not be more than 15 words. Store all answers, questions, and options in a JSON array.`;
-    const questions_prompt = `\nYou are to generate a random hard mcq question about ${topic}`;
+    const system_prompt = `Anda adalah AI yang dapat menghasilkan ${amount} soal pilihan ganda beserta jawabannya. Panjang setiap jawaban tidak boleh lebih dari 15 kata. Simpan semua jawaban, pertanyaan, dan opsi dalam array JSON.`;
+    const questions_prompt = `\nSilakan buat soal pilihan ganda tingkat sulit yang acak tentang ${topic}`;
     const output_format = {
-      question: 'question',
-      answer: 'answer with max length of 15 words',
+      question: 'pertanyaan',
+      answer: 'jawaban dengan panjang maksimal 15 kata',
       options: [
-        'option1 with max length of 15 words',
-        'option2 with max length of 15 words',
-        'option3 with max length of 15 words',
-        'option4 with max length of 15 words',
+        'opsi1 dengan panjang maksimal 15 kata',
+        'opsi2 dengan panjang maksimal 15 kata',
+        'opsi3 dengan panjang maksimal 15 kata',
+        'opsi4 dengan panjang maksimal 15 kata',
       ],
     };
     const output_format_prompt =
-      `\nYou are to output the following in json format: ${JSON.stringify(
-        output_format,
-      )}. \nDo not put quotation marks or escape character \\ in the output fields.` +
-      `\nIf output field is a list, classify output into the best element of the list.` +
-      `\nGenerate a list of JSON, one JSON for each input element.`;
+      `\nSilakan hasilkan output dalam format JSON berikut:` +
+      `\n${JSON.stringify(output_format)}` +
+      `\nJangan menambahkan tanda kutip atau karakter escape \\ di dalam field output.` +
+      `\nJika field output berupa daftar (list), klasifikasikan output ke dalam elemen terbaik dari daftar.`;
 
     const final_output_format_prompt =
       system_prompt + questions_prompt + output_format_prompt;
@@ -76,8 +75,14 @@ export class OpenaiService {
         const response = await this.model.generateContent(
           final_output_format_prompt,
         );
+        let res = response.response.text() || '';
 
-        const res = response.response.text() || '';
+        // Hapus blok kode ```json dan ``` jika ada
+        res = res.replace(/```json|```/g, '').trim();
+
+        // console.log(res); // Debugging: lihat hasil yang sudah dibersihkan
+
+        // Perbaiki JSON yang mungkin tidak valid
         const correctedJsonString = res.trim().replace(/,\s*]$/, ']');
         quiz = JSON.parse(correctedJsonString);
 
@@ -86,18 +91,22 @@ export class OpenaiService {
         }
       } catch (error) {
         if (error.message.includes('SAFETY')) {
-          console.warn('Safety error occurred, retrying...');
+          console.warn('Kesalahan keamanan terjadi, mencoba ulang...');
+          throw new HttpException(
+            'Failed to generate quiz',
+            HttpStatus.BAD_REQUEST, // Correct status code
+          );
         } else {
           console.error('Error generating quiz:', error);
-          throw new Error('Failed to generate quiz');
         }
       }
 
       attempts++;
     }
 
-    throw new Error(
-      'Failed to generate quiz in the correct format after multiple attempts due to safety constraints.',
+    throw new HttpException(
+      'Gagal menghasilkan kuis dalam format yang benar setelah beberapa kali percobaan karena batasan keamanan.',
+      HttpStatus.CONFLICT,
     );
   }
 }

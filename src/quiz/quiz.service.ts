@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   CreateQuizDto,
   OutputCreateQuizDto,
@@ -8,6 +14,9 @@ import { UpdateQuizDto } from './dto/update-quiz.dto';
 import { OpenaiService } from 'src/lib/openai/openai.service';
 import { QuestionDto } from 'src/lib/openai/dto/question.dto';
 import { PrismaService } from 'src/prisma.service';
+import { capitalizeWords } from 'src/utils/text.util';
+import { formatTimeDelta } from 'src/utils/date-time.utils';
+import { differenceInSeconds } from 'date-fns';
 
 @Injectable()
 export class QuizService {
@@ -19,10 +28,13 @@ export class QuizService {
   ) {}
 
   async create(createQuizDto: CreateQuizDto): Promise<OutputCreateQuizDto> {
-    try {
-      const { topic, amount } = createQuizDto;
+    const questions = await this.openaiService.generateQuiz(createQuizDto);
 
-      const questions = await this.openaiService.generateQuiz(createQuizDto);
+    try {
+      const { topic } = createQuizDto;
+
+      const lowerCaseTopic = topic.toLowerCase();
+
       const data = questions.map((q) => {
         return {
           ...q,
@@ -32,7 +44,7 @@ export class QuizService {
 
       const quiz = await this.prisma.quiz.create({
         data: {
-          topic,
+          topic: lowerCaseTopic,
           Question: {
             createMany: {
               data,
@@ -51,7 +63,7 @@ export class QuizService {
 
       const result: OutputCreateQuizDto = {
         quizId: quiz.quizId,
-        topic: quiz.topic,
+        topic: capitalizeWords(quiz.topic),
         amount: quiz._count.Question,
       };
 
@@ -59,12 +71,27 @@ export class QuizService {
     } catch (error) {
       this.logger.error('Failed to create quiz:', error.message);
       this.logger.error(error.stack);
-      throw new Error('Failed to create quiz');
+      throw new HttpException(
+        'Failed to create quiz',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
-  findAll() {
-    return `This action returns all quiz`;
+  async findAll() {
+    const quiz = await this.prisma.quiz.findMany({
+      include: { _count: true },
+    });
+
+    const result = quiz.map((data) => {
+      return {
+        quizId: data.quizId,
+        topic: capitalizeWords(data.topic),
+        amount: data._count.Question,
+      };
+    });
+
+    return result;
   }
 
   async findOne(id: string): Promise<OutputCreateQuizDto> {
@@ -76,7 +103,7 @@ export class QuizService {
     if (!quiz) throw new NotFoundException('Quiz not found');
     return {
       quizId: quiz.quizId,
-      topic: quiz.topic,
+      topic: capitalizeWords(quiz.topic),
       amount: quiz._count.Question,
     };
   }
@@ -128,7 +155,7 @@ export class QuizService {
       return {
         gameId: history.hisyoryId,
         quizId: history.quiz.quizId,
-        topic: history.quiz.topic,
+        topic: capitalizeWords(history.quiz.topic),
         number: answeredQuizIds.length + 1,
         amount: history.quiz._count.Question,
         timeStarted: history.timeStarted,
@@ -140,7 +167,10 @@ export class QuizService {
       };
     } catch (error) {
       this.logger.error('Failed to start quiz:', error);
-      throw new Error('Failed to start quiz');
+      throw new HttpException(
+        'Failed to start quiz',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
@@ -197,14 +227,17 @@ export class QuizService {
       return {
         gameId: historyUpdated.hisyoryId,
         quizId: historyUpdated.quiz.quizId,
-        topic: historyUpdated.quiz.topic,
+        topic: capitalizeWords(historyUpdated.quiz.topic),
         score: historyUpdated.score,
         timeStarted: historyUpdated.timeStarted,
         timeEnded: historyUpdated.timeEnded,
       };
     } catch (error) {
       this.logger.error('Failed to start quiz:', error);
-      throw new Error('Failed to start quiz');
+      throw new HttpException(
+        'Failed to finish quiz',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
@@ -264,19 +297,135 @@ export class QuizService {
         gameId: history.hisyoryId,
         answerId: answered.answerId,
         answer: answered.answer,
+        correctAnswer: question.answer,
         isCorrect: answered.isCorrect,
       };
     } catch (error) {
-      this.logger.error('Failed to start quiz:', error);
-      throw new Error('Failed to start quiz');
+      this.logger.error('Failed to answer quiz:', error);
+      throw new HttpException(
+        'Failed to answer quiz',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
-  update(id: number, updateQuizDto: UpdateQuizDto) {
-    return `This action updates a #${id} quiz`;
+  async findAllTopic() {
+    try {
+      const quiz = await this.prisma.quiz.findMany({});
+
+      const seen = {};
+
+      quiz.forEach((value) => {
+        seen[value.topic] = (seen[value.topic] || 0) + 1;
+      });
+
+      const result: { text: string; value: number }[] = [];
+
+      for (const key in seen) {
+        result.push({ text: capitalizeWords(key), value: seen[key] });
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to start quiz:', error);
+      throw new HttpException(
+        'Failed to find all quiz topic',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} quiz`;
+  async summary(quizId: string, accountId: string) {
+    try {
+      const quiz = await this.prisma.quiz.findUnique({
+        where: {
+          quizId,
+        },
+      });
+
+      const history = await this.prisma.history.findMany({
+        where: {
+          quiz: {
+            quizId,
+          },
+          timeEnded: {
+            not: {
+              equals: null,
+            },
+          },
+          account: { accountId },
+        },
+        include: {
+          quiz: { include: { Question: true, _count: true } },
+          Answer: {
+            where: {
+              isCorrect: {
+                equals: true,
+              },
+            },
+          },
+          _count: true,
+        },
+      });
+
+      // Map the history and calculate the duration
+      const historyList = history.map((data) => {
+        const secondsPassed = differenceInSeconds(
+          data.timeEnded,
+          data.timeStarted,
+        );
+
+        const duration = formatTimeDelta(secondsPassed);
+
+        return {
+          gameId: data.hisyoryId,
+          quizId: data.quiz.quizId,
+          score: data.score,
+          durationSeconds: secondsPassed, // For sorting and ranking
+          duration, // Formatted duration for return
+          timeStarted: data.timeStarted,
+          timeEnded: data.timeEnded,
+          medal: null, // Default to null, will be filled with ranking number
+        };
+      });
+
+      // Get the top score (highest score with the best duration)
+      const topScore =
+        historyList.sort((a, b) => {
+          const aValue = a.durationSeconds - a.score;
+          const bValue = b.durationSeconds - b.score;
+          return aValue - bValue; // Sort so smaller values come first (better ranking)
+        })[0] || null;
+
+      // Sort by timeStarted in descending order to get the latest score
+      const latestScore =
+        historyList.sort((a, b) => {
+          return b.timeStarted.getTime() - a.timeStarted.getTime(); // Sort by timeStarted (latest first)
+        })[0] || null;
+
+      // Assign rank (starting from 1) to all participants
+      historyList
+        .sort((a, b) => {
+          const aValue = a.durationSeconds - a.score;
+          const bValue = b.durationSeconds - b.score;
+          return aValue - bValue; // Sort so smaller values come first (better ranking)
+        })
+        .forEach((data, index) => {
+          data.medal = index + 1; // Rank starts from 1
+        });
+
+      return {
+        topic: capitalizeWords(quiz.topic),
+        topScore,
+        latestScore,
+        summaries: historyList,
+      };
+    } catch (error) {
+      this.logger.error('Failed to start quiz:', error);
+      throw new HttpException(
+        'Failed to get quiz summary',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 }

@@ -17,7 +17,7 @@ import { UpdateQuizDto } from './dto/update-quiz.dto';
 import { Response } from 'express';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { AnswerQuizDto } from './dto/answer-quiz.dto';
-import { FinishQuizDto } from "./dto/finish-quiz.dto";
+import { FinishQuizDto } from './dto/finish-quiz.dto';
 
 @Controller('quiz')
 export class QuizController {
@@ -41,9 +41,16 @@ export class QuizController {
     });
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get()
-  findAll() {
-    return this.quizService.findAll();
+  async findAll(@Req() req, @Res() res: Response) {
+    const data = await this.quizService.findAll();
+
+    return res.status(HttpStatus.OK).send({
+      data,
+      message: `${data.length} quiz about successfully got`,
+      ...req.user.jwt,
+    });
   }
 
   @UseGuards(JwtAuthGuard)
@@ -53,9 +60,9 @@ export class QuizController {
 
     const { quizId, amount, topic } = response;
 
-    return res.status(HttpStatus.CREATED).send({
+    return res.status(HttpStatus.OK).send({
       data: { quizId, topic, amount },
-      message: `${amount} question about ${topic} successfully created`,
+      message: `${amount} question about ${topic} successfully got`,
       ...req.user.jwt,
     });
   }
@@ -75,7 +82,7 @@ export class QuizController {
     const { gameId, quizId, topic, number, amount, timeStarted, question } =
       response;
 
-    return res.status(HttpStatus.CREATED).send({
+    return res.status(HttpStatus.OK).send({
       data: { gameId, quizId, topic, number, amount, timeStarted, question },
       message: `quiz about ${topic} with id ${gameId} successfully started`,
       ...req.user.jwt,
@@ -98,11 +105,11 @@ export class QuizController {
       req.user.user.sub,
     );
 
-    const { gameId, answerId, isCorrect, answer } = response;
+    const { gameId, answerId, isCorrect, correctAnswer, answer } = response;
 
     return res.status(HttpStatus.CREATED).send({
-      data: { gameId, answerId, isCorrect, answer },
-      message: `question ${answerQuizDto.questionId} successfully finished`,
+      data: { gameId, answerId, isCorrect, correctAnswer, answer },
+      message: `question ${answerQuizDto.questionId} successfully answered`,
       ...req.user.jwt,
     });
   }
@@ -130,13 +137,24 @@ export class QuizController {
     });
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateQuizDto: UpdateQuizDto) {
-    return this.quizService.update(+id, updateQuizDto);
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/summary')
+  async remove(@Req() req, @Param('id') id: string, @Res() res: Response) {
+    const summary = await this.quizService.summary(id, req.user.user.sub);
+
+    return res.status(HttpStatus.OK).send({
+      data: summary,
+      message: `summary successfully got`,
+    });
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.quizService.remove(+id);
+  @Get('find/topics')
+  async topics(@Res() res: Response) {
+    const topics = await this.quizService.findAllTopic();
+
+    return res.status(HttpStatus.OK).send({
+      data: topics,
+      message: `${topics.length} topics successfully finished`,
+    });
   }
 }
