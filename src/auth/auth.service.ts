@@ -79,10 +79,6 @@ export class AuthService {
   } {
     const access_token = this.jwtService.sign(payload);
 
-    const payloads = this.jwtService.decode(access_token);
-
-    console.log('Refresh', new Date(payloads.exp!).toLocaleString());
-
     return { access_token };
   }
 

@@ -80,8 +80,6 @@ export class OpenaiService {
         // Hapus blok kode ```json dan ``` jika ada
         res = res.replace(/```json|```/g, '').trim();
 
-        // console.log(res); // Debugging: lihat hasil yang sudah dibersihkan
-
         // Perbaiki JSON yang mungkin tidak valid
         const correctedJsonString = res.trim().replace(/,\s*]$/, ']');
         quiz = JSON.parse(correctedJsonString);
