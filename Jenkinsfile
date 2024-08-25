@@ -19,6 +19,18 @@ pipeline {
                 sh 'docker --version'
             }
         }
+        stage('Clean Old Image') { // Tahap baru untuk membersihkan image lama
+            steps {
+                script {
+                    // Hapus container terlebih dahulu jika berjalan, lalu hapus image
+                    sh '''
+                        docker stop quiiiz_be || true
+                        docker rm quiiiz_be || true
+                        docker rmi vyaninsyanurmuhammad/quiiiz_be:latest || true
+                    '''
+                }
+            }
+        }
         stage('Building Image') {
             steps {
                 sh 'docker build . -t vyaninsyanurmuhammad/quiiiz_be:latest'
