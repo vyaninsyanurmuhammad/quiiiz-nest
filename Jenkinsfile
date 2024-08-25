@@ -59,19 +59,32 @@ pipeline {
             }
         }
 
+        stage('Clean Up Docker Containers and Images Before Deploy') {
+            steps {
+                sh '''
+                echo "Stopping existing container if exists..."
+                docker stop quiiiz_be || true
+                echo "Removing existing container if exists..."
+                docker rm quiiiz_be || true
+                echo "Cleaning up old Docker images..."
+                docker image prune -af
+                '''
+            }
+        }
+
         stage('Migrate Prisma Database') {
             steps {
                 sh '''
                 echo "Running Prisma migration..."
-                docker run --rm --env-file .env vyaninsyanurmuhammad/quiiiz_be:latest npx prisma migrate deploy
+                docker run --rm --env-file .env vyaninsyanurmuhammad/quiiiz_be:latest npx prisma migrate dev --name init
                 '''
             }
         }
 
         stage('Deploy Docker Container') {
             steps {
-                echo "Deploying Docker container..."
                 sh '''
+                echo "Deploying Docker container..."
                 docker run -d --name quiiiz_be --env-file .env -p 8002:8002 vyaninsyanurmuhammad/quiiiz_be:latest
                 '''
             }
