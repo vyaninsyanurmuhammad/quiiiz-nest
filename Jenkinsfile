@@ -72,19 +72,10 @@ pipeline {
             }
         }
 
-        stage('Migrate Prisma Database') {
-            steps {
-                sh '''
-                echo "Running Prisma migration..."
-                docker run --rm --env-file .env vyaninsyanurmuhammad/quiiiz_be:latest npx prisma migrate dev --name init
-                '''
-            }
-        }
-
         stage('Deploy Docker Container') {
             steps {
-                sh '''
                 echo "Deploying Docker container..."
+                sh '''
                 docker run -d --name quiiiz_be --env-file .env -p 8002:8002 vyaninsyanurmuhammad/quiiiz_be:latest
                 '''
             }
