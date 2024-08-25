@@ -2,58 +2,78 @@ pipeline {
     agent any
     tools { nodejs 'node' }
     stages {
-        stage('Define Env') {
+        stage('Set Environment') {
             steps {
                 withCredentials([file(credentialsId: 'quiiiz_be_env', variable: 'ENV_FILE')]) {
-                    sh 'cp $ENV_FILE $WORKSPACE/.env'
+                    sh 'cp $ENV_FILE .env'
                 }
             }
         }
+
         stage('Install Dependencies') {
             steps {
                 sh 'npm install'
             }
         }
+
         stage('Check Docker') {
             steps {
                 sh 'docker --version'
             }
         }
-        stage('Clean Old Image') { // Tahap baru untuk membersihkan image lama
+
+        stage('Clean Up Docker Images') {
             steps {
-                script {
-                    // Hapus container terlebih dahulu jika berjalan, lalu hapus image
-                    sh '''
-                        docker stop quiiiz_be || true
-                        docker rm quiiiz_be || true
-                        docker rmi vyaninsyanurmuhammad/quiiiz_be:latest || true
-                    '''
-                }
+                sh '''
+                echo "Cleaning up old Docker images..."
+                docker images -q --filter "dangling=true" | xargs -r docker rmi
+                '''
             }
         }
-        stage('Building Image') {
+
+        stage('Build Docker Image') {
             steps {
                 sh 'docker build . -t vyaninsyanurmuhammad/quiiiz_be:latest'
             }
         }
-        stage('Push Image') {
+
+        stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerHubVyan', passwordVariable: 'dockerHubVyanPassword', usernameVariable: 'dockerHubVyanUser')]) {
-                    sh "docker login -u ${env.dockerHubVyanUser} -p ${env.dockerHubVyanPassword}"
-                    sh 'docker push vyaninsyanurmuhammad/quiiiz_be:latest'
+                withCredentials([usernamePassword(credentialsId: 'dockerHubVyan', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                    echo "Logging in to Docker Hub..."
+                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                    echo "Pushing Docker image..."
+                    docker push vyaninsyanurmuhammad/quiiiz_be:latest
+                    '''
                 }
             }
         }
-        stage('Migrate Prisma Database') {
+
+        stage('Verify .env in Docker') {
             steps {
-                sh 'docker run --rm --env-file .env vyaninsyanurmuhammad/quiiiz_be:latest npx prisma migrate deploy'
+                sh '''
+                echo "Verifying .env file in Docker container..."
+                docker run --rm --env-file .env vyaninsyanurmuhammad/quiiiz_be:latest cat .env
+                '''
             }
         }
-        stage('Deploy Image') {
+
+        stage('Migrate Prisma Database') {
             steps {
-                sh 'docker stop quiiiz_be || true'
-                sh 'docker rm quiiiz_be || true'
-                sh 'docker run -d --name quiiiz_be --env-file .env -p 8002:8002 vyaninsyanurmuhammad/quiiiz_be:latest'
+                sh '''
+                echo "Running Prisma migration..."
+                docker run --rm --env-file .env vyaninsyanurmuhammad/quiiiz_be:latest npx prisma migrate deploy
+                '''
+            }
+        }
+
+        stage('Deploy Docker Container') {
+            steps {
+                echo "Deploying Docker container..."
+                sh '''
+                docker run -d --name quiiiz_be --env-file .env -p 8002:8002 vyaninsyanurmuhammad/quiiiz_be:latest
+                '''
             }
         }
     }
