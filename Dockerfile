@@ -6,6 +6,7 @@ WORKDIR /app
 
 # Copy package.json dan install dependencies
 COPY package*.json ./
+
 RUN npm install
 
 # Install OpenSSL
@@ -18,7 +19,11 @@ RUN apt-get update && \
 COPY . .
 
 # Generate Prisma Client dan tambahkan logging untuk memastikan eksekusi sukses
-RUN npx prisma generate --schema=./prisma/schema.prisma && echo "Prisma Client generated successfully"
+RUN npx prisma generate
+
+# Debugging: menampilkan isi .env
+RUN echo "DATABASE_URL: $(grep DATABASE_URL .env)" \
+    && echo "DIRECT_URL: $(grep DIRECT_URL .env)"
 
 # Expose port
 EXPOSE 8002
