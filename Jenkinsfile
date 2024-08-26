@@ -16,6 +16,17 @@ pipeline {
             }
         }
 
+        stage('Verify .env') {
+            steps {
+                sh '''
+                echo "Verifying .env file..."
+                cat .env
+                echo "DATABASE_URL=$(grep DATABASE_URL .env)"
+                echo "DIRECT_URL=$(grep DIRECT_URL .env)"
+                '''
+            }
+        }
+
         stage('Install Dependencies') {
             steps {
                 sh 'npm install'
@@ -28,14 +39,18 @@ pipeline {
             }
         }
 
+        stage('Clean Up Docker Images') {
+            steps {
+                sh '''
+                echo "Cleaning up old Docker images..."
+                docker images -q --filter "dangling=true" | xargs -r docker rmi
+                '''
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
-                script {
-                    echo "Cleaning up old Docker images..."
-                    sh 'docker image prune -f'
-                    echo "Building Docker image..."
-                    sh 'docker build --no-cache -t ${IMAGE_NAME}:${IMAGE_TAG} .'
-                }
+                sh 'docker build . -t vyaninsyanurmuhammad/quiiiz_be:latest'
             }
         }
 
@@ -46,18 +61,31 @@ pipeline {
                     echo "Logging in to Docker Hub..."
                     echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
                     echo "Pushing Docker image..."
-                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    docker push vyaninsyanurmuhammad/quiiiz_be:latest
                     '''
                 }
             }
         }
 
-        stage('Clean Up Docker Containers Before Deploy') {
+        stage('Verify .env in Docker') {
             steps {
-                script {
-                    echo "Stopping and removing existing container..."
-                    sh 'docker stop quiiiz_be || true && docker rm quiiiz_be || true'
-                }
+                sh '''
+                echo "Verifying .env file in Docker container..."
+                docker run --rm --env-file .env vyaninsyanurmuhammad/quiiiz_be:latest cat .env
+                '''
+            }
+        }
+
+        stage('Clean Up Docker Containers and Images Before Deploy') {
+            steps {
+                sh '''
+                echo "Stopping existing container if exists..."
+                docker stop quiiiz_be || true
+                echo "Removing existing container if exists..."
+                docker rm quiiiz_be || true
+                echo "Cleaning up old Docker images..."
+                docker image prune -af
+                '''
             }
         }
 
