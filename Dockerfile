@@ -40,4 +40,4 @@ EXPOSE 8002
 
 # Jalankan aplikasi
 # CMD ["npm", "run", "start"]
-CMD ["pm2-runtime", "main.js"]
+CMD ["pm2-runtime", "dist/main.js"]
