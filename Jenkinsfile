@@ -50,7 +50,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build . -t vyaninsyanurmuhammad/quiiiz_be:latest'
+                sh 'docker build . -t ${IMAGE_NAME}:${IMAGE_TAG}'
             }
         }
 
@@ -61,7 +61,7 @@ pipeline {
                     echo "Logging in to Docker Hub..."
                     echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
                     echo "Pushing Docker image..."
-                    docker push vyaninsyanurmuhammad/quiiiz_be:latest
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
                     '''
                 }
             }
@@ -71,7 +71,7 @@ pipeline {
             steps {
                 sh '''
                 echo "Verifying .env file in Docker container..."
-                docker run --rm --env-file .env vyaninsyanurmuhammad/quiiiz_be:latest cat .env
+                docker run --rm --env-file .env ${IMAGE_NAME}:${IMAGE_TAG} cat .env
                 '''
             }
         }
