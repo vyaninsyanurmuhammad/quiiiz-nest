@@ -1,6 +1,12 @@
 pipeline {
     agent any
     tools { nodejs 'node' }
+    
+    environment {
+        IMAGE_NAME = 'vyaninsyanurmuhammad/quiiiz_be'
+        IMAGE_TAG = 'latest'
+    }
+
     stages {
         stage('Set Environment') {
             steps {
@@ -22,18 +28,14 @@ pipeline {
             }
         }
 
-        stage('Clean Up Docker Images') {
-            steps {
-                sh '''
-                echo "Cleaning up old Docker images..."
-                docker images -q --filter "dangling=true" | xargs -r docker rmi
-                '''
-            }
-        }
-
         stage('Build Docker Image') {
             steps {
-                sh 'docker build . -t vyaninsyanurmuhammad/quiiiz_be:latest'
+                script {
+                    echo "Cleaning up old Docker images..."
+                    sh 'docker image prune -f'
+                    echo "Building Docker image..."
+                    sh 'docker build --no-cache -t ${IMAGE_NAME}:${IMAGE_TAG} .'
+                }
             }
         }
 
@@ -44,31 +46,18 @@ pipeline {
                     echo "Logging in to Docker Hub..."
                     echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
                     echo "Pushing Docker image..."
-                    docker push vyaninsyanurmuhammad/quiiiz_be:latest
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
                     '''
                 }
             }
         }
 
-        stage('Verify .env in Docker') {
+        stage('Clean Up Docker Containers Before Deploy') {
             steps {
-                sh '''
-                echo "Verifying .env file in Docker container..."
-                docker run --rm --env-file .env vyaninsyanurmuhammad/quiiiz_be:latest cat .env
-                '''
-            }
-        }
-
-        stage('Clean Up Docker Containers and Images Before Deploy') {
-            steps {
-                sh '''
-                echo "Stopping existing container if exists..."
-                docker stop quiiiz_be || true
-                echo "Removing existing container if exists..."
-                docker rm quiiiz_be || true
-                echo "Cleaning up old Docker images..."
-                docker image prune -af
-                '''
+                script {
+                    echo "Stopping and removing existing container..."
+                    sh 'docker stop quiiiz_be || true && docker rm quiiiz_be || true'
+                }
             }
         }
 
@@ -76,7 +65,7 @@ pipeline {
             steps {
                 echo "Deploying Docker container..."
                 sh '''
-                docker run -d --name quiiiz_be --env-file .env -p 8002:8002 vyaninsyanurmuhammad/quiiiz_be:latest
+                docker run -d --name quiiiz_be --env-file .env -p 8002:8002 ${IMAGE_NAME}:${IMAGE_TAG}
                 '''
             }
         }
