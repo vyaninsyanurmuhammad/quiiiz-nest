@@ -9,10 +9,4 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - DIRECT_URL=${DIRECT_URL}
     command: >
-      sh -c "npx prisma generate && npm run start"
-    volumes:
-      - .:/app
-      - /app/node_modules
-    restart: always
-    env_file:
-      - .env
+      sh -c "npx prisma generate --schema=./prisma/schema.prisma && npm run start"
