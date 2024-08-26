@@ -39,11 +39,18 @@ pipeline {
             }
         }
 
-        stage('Clean Up Docker Images') {
+        stage('Clean Up Docker Containers and Images') {
             steps {
                 sh '''
+                echo "Stopping and removing any existing container named 'quiiiz_be'..."
+                docker stop quiiiz_be || true
+                docker rm quiiiz_be || true
+                
+                echo "Cleaning up old Docker containers..."
+                docker container prune -f
+                
                 echo "Cleaning up old Docker images..."
-                docker images -q --filter "dangling=true" | xargs -r docker rmi
+                docker image prune -af
                 '''
             }
         }
@@ -76,23 +83,10 @@ pipeline {
             }
         }
 
-        stage('Clean Up Docker Containers and Images Before Deploy') {
-            steps {
-                sh '''
-                echo "Stopping existing container if exists..."
-                docker stop quiiiz_be || true
-                echo "Removing existing container if exists..."
-                docker rm quiiiz_be || true
-                echo "Cleaning up old Docker images..."
-                docker image prune -af
-                '''
-            }
-        }
-
         stage('Deploy Docker Container') {
             steps {
-                echo "Deploying Docker container..."
                 sh '''
+                echo "Deploying Docker container..."
                 docker run -d --name quiiiz_be --env-file .env -p 8002:8002 ${IMAGE_NAME}:${IMAGE_TAG}
                 '''
             }
