@@ -39,18 +39,15 @@ pipeline {
             }
         }
 
-        stage('Clean Up Docker Containers and Images') {
+        stage('Clean Up Old Docker Container and Image') {
             steps {
                 sh '''
-                echo "Stopping and removing any existing container named 'quiiiz_be'..."
+                echo "Stopping and removing old container 'quiiiz_be'..."
                 docker stop quiiiz_be || true
                 docker rm quiiiz_be || true
                 
-                echo "Cleaning up old Docker containers..."
-                docker container prune -f
-                
-                echo "Cleaning up old Docker images..."
-                docker image prune -af
+                echo "Cleaning up old image 'quiiiz_be'..."
+                docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true
                 '''
             }
         }
